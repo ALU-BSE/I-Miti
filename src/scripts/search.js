@@ -38,11 +38,13 @@ document.addEventListener('DOMContentLoaded', () => {
             results.forEach(pharmacy => {
                 const pharmacyDiv = document.createElement('div');
                 pharmacyDiv.classList.add('pharmacy-result');
+                const mapsUrl = `https://www.google.com/maps?q=${pharmacy.latitude},${pharmacy.longitude}`;
                 pharmacyDiv.innerHTML = `
                     <h3>${pharmacy.name}</h3>
                     <p>Address: ${pharmacy.address}</p>
                     <p>Phone: ${pharmacy.number}</p>
                     <p>Distance: ${pharmacy.distance.toFixed(2)} km</p>
+                    <a href="${mapsUrl}" target="_blank" class="directions-btn">Get Directions</a>
                 `;
                 resultsContainer.appendChild(pharmacyDiv);
             });
