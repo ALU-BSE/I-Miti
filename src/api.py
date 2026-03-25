@@ -6,8 +6,54 @@ from pydantic import BaseModel
 import sqlite3
 import os
 from typing import List, Optional
+from pathlib import Path
+import time
+import hmac
+import hashlib
+import base64
 
 app = FastAPI()
+
+# Resolve file paths relative to this module so running uvicorn from
+# different working directories doesn't break static mounts or create
+# multiple database.sqlite3 files.
+BASE_DIR = Path(__file__).resolve().parent  # .../src
+DB_PATH = BASE_DIR / "database.sqlite3"
+SQL_PATH = BASE_DIR / "database.sql"
+SCRIPTS_DIR = BASE_DIR / "scripts"
+CSS_DIR = BASE_DIR / "css"
+HTML_DIR = BASE_DIR / "hmtl"
+
+# Registration verification (simple signed token)
+REGISTRATION_PASSWORD = os.environ.get("REGISTRATION_PASSWORD", "I-Miti2024Verify")
+REGISTRATION_TOKEN_TTL_SECONDS = int(os.environ.get("REGISTRATION_TOKEN_TTL_SECONDS", "900"))  # 15 minutes
+REGISTRATION_TOKEN_SECRET = os.environ.get("REGISTRATION_TOKEN_SECRET", "dev-only-change-me")
+
+def _issue_registration_token() -> str:
+    ts = str(int(time.time()))
+    sig = hmac.new(
+        REGISTRATION_TOKEN_SECRET.encode("utf-8"),
+        ts.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+    raw = f"{ts}.{sig}".encode("utf-8")
+    return base64.urlsafe_b64encode(raw).decode("utf-8")
+
+def _verify_registration_token(token: str) -> bool:
+    try:
+        raw = base64.urlsafe_b64decode(token.encode("utf-8")).decode("utf-8")
+        ts, sig = raw.split(".", 1)
+        ts_int = int(ts)
+        if int(time.time()) - ts_int > REGISTRATION_TOKEN_TTL_SECONDS:
+            return False
+        expected = hmac.new(
+            REGISTRATION_TOKEN_SECRET.encode("utf-8"),
+            ts.encode("utf-8"),
+            hashlib.sha256,
+        ).hexdigest()
+        return hmac.compare_digest(expected, sig)
+    except Exception:
+        return False
 
 # CORS (allow frontend to call the API)
 app.add_middleware(
@@ -20,15 +66,15 @@ app.add_middleware(
 
 # Database connection
 def get_db():
-    conn = sqlite3.connect('database.sqlite3')
+    conn = sqlite3.connect(str(DB_PATH))
     conn.row_factory = sqlite3.Row
     return conn
 
 # Initialize database if not exists
 def init_db():
-    if not os.path.exists('database.sqlite3'):
+    if not DB_PATH.exists():
         conn = get_db()
-        with open('src/database.sql', 'r') as f:
+        with open(SQL_PATH, "r", encoding="utf-8") as f:
             sql = f.read()
         conn.executescript(sql)
         conn.commit()
@@ -212,25 +258,30 @@ class PharmacyRegistration(BaseModel):
     address: str
     number: str
     licenceID: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    verificationToken: str
 
 @app.post("/verify_registration_password")
 def verify_registration_password(data: dict):
     password = data.get('password', '').strip()
-    correct_password = 'I-Miti2024Verify'  # This should be stored securely in production
-
-    if password == correct_password:
-        return {"verified": True, "message": "Password verified successfully"}
+    if password == REGISTRATION_PASSWORD:
+        token = _issue_registration_token()
+        return {"verified": True, "token": token, "message": "Password verified successfully"}
     else:
         return {"verified": False, "message": "Incorrect password"}
 
 @app.post("/register_pharmacy")
 def register_pharmacy(registration: PharmacyRegistration):
+    if not _verify_registration_token(registration.verificationToken):
+        raise HTTPException(status_code=403, detail="Registration verification required or expired")
+
     # Create the pharmacy record
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute(
-        "INSERT INTO Pharmacy (name, address, number) VALUES (?, ?, ?)",
-        (registration.name, registration.address, registration.number),
+        "INSERT INTO Pharmacy (name, address, number, latitude, longitude) VALUES (?, ?, ?, ?, ?)",
+        (registration.name, registration.address, registration.number, registration.latitude, registration.longitude),
     )
     pharmacy_id = cursor.lastrowid
 
@@ -259,15 +310,15 @@ def register_pharmacy(registration: PharmacyRegistration):
             "name": registration.name,
             "address": registration.address,
             "number": registration.number,
-            "latitude": None,
-            "longitude": None,
+            "latitude": registration.latitude,
+            "longitude": registration.longitude,
         },
         "pharmacist": pharmacist,
     }
 
 @app.post("/login_pharmacy")
 def login_pharmacy(credential: dict):
-    cert = credential.get('certificate')
+    cert = (credential.get('certificate') or "").strip()
     if not cert:
         raise HTTPException(status_code=400, detail='License certificate is required')
 
@@ -623,13 +674,13 @@ def search_medicine(medicine: str, latitude: float, longitude: float):
 
 # Serve static files
 # Mount scripts BEFORE the main directory so /scripts/* is available
-app.mount("/scripts", StaticFiles(directory="scripts"), name="scripts")
-app.mount("/css", StaticFiles(directory="css"), name="css")
+app.mount("/scripts", StaticFiles(directory=str(SCRIPTS_DIR)), name="scripts")
+app.mount("/css", StaticFiles(directory=str(CSS_DIR)), name="css")
 # Serve frontend files (HTML/CSS/JS) from the "hmtl" directory
 # MUST be mounted LAST so API routes are processed first
-app.mount("/", StaticFiles(directory="hmtl", html=True), name="static")
+app.mount("/", StaticFiles(directory=str(HTML_DIR), html=True), name="static")
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="127.0.0.1", port=8000)
 

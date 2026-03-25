@@ -46,6 +46,9 @@
                 const result = await response.json();
 
                 if (result.verified) {
+                    if (result.token) {
+                        sessionStorage.setItem('registrationToken', result.token);
+                    }
                     // Redirect to registration page
                     window.location.href = 'pharegister.html';
                 } else {

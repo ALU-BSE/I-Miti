@@ -5,6 +5,13 @@ document.addEventListener('DOMContentLoaded', () => {
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
 
+    const verificationToken = sessionStorage.getItem('registrationToken');
+    if (!verificationToken) {
+      alert('Please verify the registration password first.');
+      window.location.href = 'index.html';
+      return;
+    }
+
     const name = document.getElementById('name')?.value?.trim();
     const address = document.getElementById('address')?.value?.trim();
     const phone = document.getElementById('phone')?.value?.trim();
@@ -24,6 +31,7 @@ document.addEventListener('DOMContentLoaded', () => {
       licenceID: certificate || null,
       latitude: latitude ? parseFloat(latitude) : null,
       longitude: longitude ? parseFloat(longitude) : null,
+      verificationToken,
 
     };
 

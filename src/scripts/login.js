@@ -9,6 +9,10 @@ document.addEventListener('DOMContentLoaded', () => {
     form.addEventListener('submit', async (event) => {
       event.preventDefault();
         const certificate = document.getElementById('certificate')?.value?.trim();
+        if (!certificate) {
+          alert('Please enter your license certificate number.');
+          return;
+        }
         // check if the certificate number is present in the database
         try {
           const res = await fetch('/login_pharmacy', {
@@ -32,8 +36,6 @@ document.addEventListener('DOMContentLoaded', () => {
           alert('Login failed: ' + (err.message || err));
         }
       });
-
-      form.addEventListener('')
     }
   });
 
