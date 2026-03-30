@@ -290,7 +290,7 @@ def register_pharmacy(registration: PharmacyRegistration):
     if registration.licenceID:
         cursor.execute(
             "INSERT INTO Pharmacist (pharmacyID, username, password, licenceID) VALUES (?, ?, ?, ?)",
-            (pharmacy_id, registration.number, registration.licenceID, registration.licenceID),
+            (pharmacy_id, registration.licenceID, registration.licenceID, registration.licenceID),
         )
         pharmacist_id = cursor.lastrowid
         pharmacist = {
