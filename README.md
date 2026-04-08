@@ -4,6 +4,8 @@ I-Miti helps people in Burundi find pharmacies that stock a specific medicine. A
 
 Pharmacies register on the platform and manage their own medicine inventory through a dedicated dashboard.
 
+Website: https://i-miti.onrender.com/
+
 ---
 
 ## Table of Contents
